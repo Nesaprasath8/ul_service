@@ -36,48 +36,26 @@ public class ProductService {
         }
     }
 
+    // BUGFIX: this previously tried rs.getObject("p_prd_id") / getString("p_prd_name")
+    // etc. first and only fell back to the plain column name (e.g. "id") if that
+    // returned null. But rs.getObject/getString THROWS when the column doesn't
+    // exist at all, rather than returning null - and the GET query has never
+    // returned any "p_prd_*"-prefixed columns, only the plain aliases below. So
+    // every single call to this method was throwing on its very first line,
+    // meaning getProducts()/getProductById() always failed. Rewritten to read
+    // exactly the columns the GET query in Product_Management_SP.sql actually
+    // returns.
     private UL_Product mapProduct(ResultSet rs) throws SQLException {
         UL_Product item = new UL_Product();
-        item.id = (Integer) rs.getObject("p_prd_id");
-        if (item.id == null) {
-            item.id = (Integer) rs.getObject("id");
-        }
-
-        item.name = rs.getString("p_prd_name");
-        if (item.name == null) {
-            item.name = rs.getString("name");
-        }
-
-        item.description = rs.getString("p_prd_description");
-        if (item.description == null) {
-            item.description = rs.getString("description");
-        }
-
-        item.price = rs.getString("p_prd_price");
-        if (item.price == null) {
-            item.price = rs.getString("price");
-        }
-
-        item.category = rs.getString("p_prd_category");
-        if (item.category == null) {
-            item.category = rs.getString("category");
-        }
-
-        item.slug = rs.getString("p_prd_slug");
-        item.comparePrice = rs.getString("p_prd_compare_price");
-
-        item.quantity = (Integer) rs.getObject("p_prd_quantity");
-        if (item.quantity == null) {
-            item.quantity = (Integer) rs.getObject("quantity");
-        }
-
-        Object statusObj = rs.getObject("p_prd_status");
-        if (statusObj != null) {
-            String statusValue = statusObj.toString();
-            item.status = statusValue.isEmpty() ? null : statusValue.charAt(0);
-        }
-
-        item.lst_modifiedby = rs.getString("p_lst_modifiedby");
+        item.id = (Integer) rs.getObject("id");
+        item.name = rs.getString("name");
+        item.description = rs.getString("description");
+        item.slug = rs.getString("slug");
+        item.quantity = (Integer) rs.getObject("quantity");
+        item.price = rs.getString("price");
+        item.comparePrice = rs.getString("compareprice");
+        item.categoryId = (Integer) rs.getObject("category_id");
+        item.categoryName = rs.getString("categoryname");
         return item;
     }
 
@@ -87,9 +65,6 @@ public class ProductService {
         sql.append("p_mode => ?");
         sql.append(", p_prd_name => ?");
         sql.append(", p_param => ?");
-        // BUGFIX: this was previously missing the separating comma
-        // ("p_param => ?" + "p_prddet_cursor => ?" concatenated with no comma),
-        // which produced invalid SQL and would fail at execution time.
         sql.append(", p_prddet_cursor => ?");
         sql.append(")");
         valuesToBind.add("GET");
@@ -143,18 +118,25 @@ public class ProductService {
         sql.append("p_mode => ?");
         sql.append(", p_prd_name => ?");
         sql.append(", p_prd_description => ?");
-        sql.append(", p_prd_price => ?");
-        sql.append(", p_prd_category => ?");
+        // BUGFIX: every one of the four parameter names below was wrong
+        // and did not exist on the procedure - p_prd_price should be
+        // p_prd_base_price, p_prd_category should be p_prd_category_id
+        // (and needs an integer, not the free-text string the old
+        // UL_Product.category field held), p_prd_quantity should be
+        // p_prd_stock_quantity, and p_lst_modifiedby should be
+        // p_actor_id. Product creation has never worked because of this.
+        sql.append(", p_prd_base_price => ?");
+        sql.append(", p_prd_category_id => ?");
         sql.append(", p_prd_slug => ?");
         sql.append(", p_prd_compare_price => ?");
-        sql.append(", p_prd_quantity => ?");
-        sql.append(", p_lst_modifiedby => ?");
+        sql.append(", p_prd_stock_quantity => ?");
+        sql.append(", p_actor_id => ?");
         sql.append(")");
         valuesToBind.add("INSERT");
         valuesToBind.add(product != null ? product.name : null);
         valuesToBind.add(product != null ? product.description : null);
         valuesToBind.add(product != null ? product.price : null);
-        valuesToBind.add(product != null ? product.category : null);
+        valuesToBind.add(product != null ? product.categoryId : null);
         valuesToBind.add(product != null ? product.slug : null);
         valuesToBind.add(product != null ? product.comparePrice : null);
         valuesToBind.add(product != null ? product.quantity : null);
@@ -176,19 +158,19 @@ public class ProductService {
         sql.append(", p_prd_id => ?");
         sql.append(", p_prd_name => ?");
         sql.append(", p_prd_description => ?");
-        sql.append(", p_prd_price => ?");
-        sql.append(", p_prd_category => ?");
+        sql.append(", p_prd_base_price => ?");
+        sql.append(", p_prd_category_id => ?");
         sql.append(", p_prd_slug => ?");
         sql.append(", p_prd_compare_price => ?");
-        sql.append(", p_prd_quantity => ?");
-        sql.append(", p_lst_modifiedby => ?");
+        sql.append(", p_prd_stock_quantity => ?");
+        sql.append(", p_actor_id => ?");
         sql.append(")");
         valuesToBind.add("UPDATE");
         valuesToBind.add(product != null ? product.id : null);
         valuesToBind.add(product != null ? product.name : null);
         valuesToBind.add(product != null ? product.description : null);
         valuesToBind.add(product != null ? product.price : null);
-        valuesToBind.add(product != null ? product.category : null);
+        valuesToBind.add(product != null ? product.categoryId : null);
         valuesToBind.add(product != null ? product.slug : null);
         valuesToBind.add(product != null ? product.comparePrice : null);
         valuesToBind.add(product != null ? product.quantity : null);
@@ -203,16 +185,16 @@ public class ProductService {
         return "Success";
     }
 
-    public String deleteProduct(int id) throws SQLException {
+    public String deleteProduct(int id, String actorId) throws SQLException {
         StringBuilder sql = new StringBuilder("CALL ul_sp_productmanaging(");
         List<Object> valuesToBind = new ArrayList<>();
         sql.append("p_mode => ?");
         sql.append(", p_prd_id => ?");
-        sql.append(", p_param => ?");
+        sql.append(", p_actor_id => ?");
         sql.append(")");
         valuesToBind.add("DELETE");
         valuesToBind.add(id);
-        valuesToBind.add("id");
+        valuesToBind.add(actorId);
 
         try (Connection conn = getConnection();
                 CallableStatement stmt = conn.prepareCall(sql.toString())) {

@@ -27,3 +27,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local secrets - never commit real credentials/keys
+src/main/resources/application-local.properties
+.env

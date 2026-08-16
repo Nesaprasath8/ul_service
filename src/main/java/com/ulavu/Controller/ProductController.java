@@ -2,9 +2,12 @@ package com.ulavu.Controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +35,7 @@ public class ProductController {
         UL_Response response = new UL_Response();
         try {
             response.status = "success";
-            response.result = productService.getProducts(new com.ulavu.Entity.UL_Product(), "all");
+            response.result = productService.getProducts(new UL_Product(), "all");
             response.message = "Product list retrieved successfully";
         } catch (Exception e) {
             log.error("Failed to retrieve products", e);
@@ -60,9 +63,11 @@ public class ProductController {
     }
 
     @PostMapping("/")
-    public UL_Response createProduct(@Valid @RequestBody UL_Product product) {
+    public UL_Response createProduct(@Valid @RequestBody UL_Product product,
+            @RequestAttribute("authUsername") String authUsername) {
         UL_Response response = new UL_Response();
         try {
+            product.lst_modifiedby = authUsername;
             String result = productService.createProduct(product);
             if ("Success".equalsIgnoreCase(result)) {
                 response.status = "success";
@@ -82,4 +87,40 @@ public class ProductController {
         return response;
     }
 
+    @PutMapping("/")
+    public UL_Response updateProduct(@Valid @RequestBody UL_Product product,
+            @RequestAttribute("authUsername") String authUsername) {
+        UL_Response response = new UL_Response();
+        try {
+            product.lst_modifiedby = authUsername;
+            String result = productService.updateProduct(product);
+            response.status = "success";
+            response.result = result;
+            response.message = "Product updated successfully";
+        } catch (Exception e) {
+            log.error("Failed to update product '{}'", product.id, e);
+            response.status = "error";
+            response.result = null;
+            response.message = "Failed to update product";
+        }
+        return response;
+    }
+
+    @DeleteMapping("/{id}")
+    public UL_Response deleteProduct(@PathVariable("id") int id,
+            @RequestAttribute("authUsername") String authUsername) {
+        UL_Response response = new UL_Response();
+        try {
+            String result = productService.deleteProduct(id, authUsername);
+            response.status = "success";
+            response.result = result;
+            response.message = "Product deleted successfully";
+        } catch (Exception e) {
+            log.error("Failed to delete product '{}'", id, e);
+            response.status = "error";
+            response.result = null;
+            response.message = "Failed to delete product";
+        }
+        return response;
+    }
 }
